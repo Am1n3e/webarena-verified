@@ -24,7 +24,6 @@ on:
       tag:
         description: "Image tag (semver)"
         required: true
-        default: "1.0.1"
       push_latest:
         description: "Also tag as latest"
         type: boolean

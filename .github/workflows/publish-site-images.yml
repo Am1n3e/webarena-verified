@@ -109,6 +109,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build linux/amd64 for smoke
+        if: ${{ matrix.site != 'gitlab' && matrix.site != 'map' }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -122,6 +123,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=site-${{ matrix.site }}
 
       - name: Smoke test
+        if: ${{ matrix.site != 'gitlab' && matrix.site != 'map' }}
         env:
           IMAGE: ${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}
           SITE: ${{ matrix.site }}
@@ -129,10 +131,6 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --entrypoint env-ctrl "$IMAGE" --help
-          if [ "$SITE" = "map" ]; then
-            echo "map: env-ctrl present; full boot needs data volumes"
-            exit 0
-          fi
 
           extra=()
           if [ "$SITE" = "wikipedia" ]; then

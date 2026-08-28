@@ -4,8 +4,7 @@ name: Publish Site Images
 #   DOCKERHUB_USERNAME  Docker Hub user that can push am1n3e/webarena-verified-*
 #   DOCKERHUB_TOKEN     Docker Hub access token
 #
-# Wikipedia is linux/amd64+linux/arm64 (kiwix-serve is multi-arch).
-# Other sites are linux/amd64 only — their bases are amd64-only.
+# All site images are published as linux/amd64 + linux/arm64.
 on:
   workflow_dispatch:
     inputs:
@@ -47,7 +46,7 @@ jobs:
   publish:
     name: Publish ${{ matrix.site }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.site == 'map' && 180 || 90 }}
+    timeout-minutes: ${{ matrix.site == 'map' && 180 || 120 }}
     strategy:
       fail-fast: false
       matrix:
@@ -57,7 +56,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up QEMU
-        if: matrix.site == 'wikipedia'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -80,14 +78,8 @@ jobs:
           if [ "${{ inputs.push_latest }}" = "true" ]; then
             TAGS="${TAGS},${IMAGE}:latest"
           fi
-          if [ "$SITE" = "wikipedia" ]; then
-            PLATFORMS="linux/amd64,linux/arm64"
-          else
-            PLATFORMS="linux/amd64"
-          fi
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
-          echo "platforms=${PLATFORMS}" >> "$GITHUB_OUTPUT"
           echo "dockerfile=dev/environments/docker/sites/${SITE}/Dockerfile" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
@@ -97,7 +89,7 @@ jobs:
           file: ${{ steps.image.outputs.dockerfile }}
           push: ${{ inputs.dry_run != true }}
           tags: ${{ steps.image.outputs.tags }}
-          platforms: ${{ steps.image.outputs.platforms }}
+          platforms: linux/amd64,linux/arm64
           provenance: false
           cache-from: type=gha,scope=site-${{ matrix.site }}
           cache-to: type=gha,mode=max,scope=site-${{ matrix.site }}
@@ -105,4 +97,21 @@ jobs:
       - name: Verify image manifest
         if: ${{ inputs.dry_run != true }}
         run: |
-          docker buildx imagetools inspect "${{ steps.image.outputs.image }}:${{ inputs.tag }}"
+          IMAGE_REF="${{ steps.image.outputs.image }}:${{ inputs.tag }}"
+          docker buildx imagetools inspect "$IMAGE_REF"
+          docker buildx imagetools inspect --raw "$IMAGE_REF" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          platforms = set()
+          for manifest in data.get("manifests") or []:
+              platform = manifest.get("platform") or {}
+              os_name = platform.get("os")
+              arch = platform.get("architecture")
+              if os_name and arch:
+                  platforms.add(f"{os_name}/{arch}")
+          required = {"linux/amd64", "linux/arm64"}
+          missing = required - platforms
+          print("platforms:", ", ".join(sorted(platforms)) or "(none)")
+          if missing:
+              raise SystemExit("missing platforms: " + ", ".join(sorted(missing)))
+          '

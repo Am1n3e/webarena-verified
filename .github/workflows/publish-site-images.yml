@@ -4,9 +4,10 @@ name: Publish Site Images
 #   DOCKERHUB_USERNAME  Docker Hub user that can push am1n3e/webarena-verified-*
 #   DOCKERHUB_TOKEN     Docker Hub access token
 #
-# All site images are published as linux/amd64 + linux/arm64.
+# Site images are linux/amd64 + linux/arm64, except map (amd64-only: OSM/Nominatim/OSRM bases).
 # Releases always rebuild and push every site; Docker layer cache skips unchanged layers.
-# workflow_dispatch + dry_run builds both architectures without pushing (manual test).
+# workflow_dispatch + dry_run builds without pushing (manual test).
+# Before any push, linux/amd64 is loaded and smoke-tested (env-ctrl /status).
 on:
   release:
     types: [published]
@@ -88,15 +89,79 @@ jobs:
           if [ "$PUSH_LATEST" = "true" ]; then
             TAGS="${TAGS},${IMAGE}:latest"
           fi
+          if [ "$SITE" = "map" ]; then
+            PLATFORMS="linux/amd64"
+          else
+            PLATFORMS="linux/amd64,linux/arm64"
+          fi
+          if [ "$SITE" = "wikipedia" ]; then
+            ENV_CTRL_PORT="8874"
+          else
+            ENV_CTRL_PORT="8877"
+          fi
           {
             echo "image=${IMAGE}"
             echo "tag=${TAG}"
             echo "tags=${TAGS}"
+            echo "platforms=${PLATFORMS}"
+            echo "env_ctrl_port=${ENV_CTRL_PORT}"
             echo "dockerfile=dev/environments/docker/sites/${SITE}/Dockerfile"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Build only
-        if: ${{ github.event_name != 'release' && inputs.dry_run == true }}
+      - name: Build linux/amd64 for smoke
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ steps.image.outputs.dockerfile }}
+          push: false
+          load: true
+          tags: ${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}
+          platforms: linux/amd64
+          provenance: false
+          cache-from: type=gha,scope=site-${{ matrix.site }}
+          cache-to: type=gha,mode=max,scope=site-${{ matrix.site }}
+
+      - name: Smoke test
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}
+          SITE: ${{ matrix.site }}
+          ENV_CTRL_PORT: ${{ steps.image.outputs.env_ctrl_port }}
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint env-ctrl "$IMAGE" --help
+          if [ "$SITE" = "map" ]; then
+            echo "map: env-ctrl present; full boot needs data volumes"
+            exit 0
+          fi
+
+          extra=()
+          if [ "$SITE" = "wikipedia" ]; then
+            mkdir -p /tmp/wa-zim
+            curl -fsSL -o /tmp/wa-zim/ray.zim \
+              "https://download.kiwix.org/zim/wikipedia/wikipedia_en_ray-charles_maxi_2026-02.zim"
+            extra+=(-e "WA_ENV_CTRL_ZIM_FILE=/data/ray.zim" -v /tmp/wa-zim:/data:ro)
+          fi
+
+          name="wa-smoke-${SITE}"
+          docker rm -f "$name" >/dev/null 2>&1 || true
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name "$name" -p "18877:${ENV_CTRL_PORT}" "${extra[@]}" "$IMAGE"
+          i=0
+          while [ "$i" -lt 30 ]; do
+            if curl -sf "http://127.0.0.1:18877/status"; then
+              echo
+              echo "smoke ok: ${SITE} env-ctrl /status"
+              exit 0
+            fi
+            i=$((i + 1))
+            sleep 2
+          done
+          echo "smoke failed: ${SITE} env-ctrl /status not up"
+          docker logs "$name" || true
+          exit 1
+
+      - name: Build remaining platforms
+        if: ${{ github.event_name != 'release' && inputs.dry_run == true && matrix.site != 'map' }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -104,7 +169,7 @@ jobs:
           push: false
           outputs: type=cacheonly
           tags: ${{ steps.image.outputs.tags }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ steps.image.outputs.platforms }}
           provenance: false
           cache-from: type=gha,scope=site-${{ matrix.site }}
           cache-to: type=gha,mode=max,scope=site-${{ matrix.site }}
@@ -117,27 +182,36 @@ jobs:
           file: ${{ steps.image.outputs.dockerfile }}
           push: true
           tags: ${{ steps.image.outputs.tags }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ steps.image.outputs.platforms }}
           provenance: false
           cache-from: type=gha,scope=site-${{ matrix.site }}
           cache-to: type=gha,mode=max,scope=site-${{ matrix.site }}
 
       - name: Verify image manifest
         if: ${{ github.event_name == 'release' || inputs.dry_run != true }}
+        env:
+          REQUIRED_PLATFORMS: ${{ steps.image.outputs.platforms }}
         run: |
           IMAGE_REF="${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}"
           docker buildx imagetools inspect "$IMAGE_REF"
-          docker buildx imagetools inspect --raw "$IMAGE_REF" | python3 -c '
-          import json, sys
+          docker buildx imagetools inspect --format '{{json .}}' "$IMAGE_REF" | python3 -c '
+          import json, os, sys
           data = json.load(sys.stdin)
+          required = {p.strip() for p in os.environ["REQUIRED_PLATFORMS"].split(",") if p.strip()}
           platforms = set()
-          for manifest in data.get("manifests") or []:
+          manifests = (data.get("manifest") or {}).get("manifests") or data.get("manifests") or []
+          for manifest in manifests:
               platform = manifest.get("platform") or {}
               os_name = platform.get("os")
               arch = platform.get("architecture")
               if os_name and arch:
                   platforms.add(f"{os_name}/{arch}")
-          required = {"linux/amd64", "linux/arm64"}
+          if not platforms:
+              image = data.get("image") or {}
+              os_name = image.get("os")
+              arch = image.get("architecture")
+              if os_name and arch:
+                  platforms.add(f"{os_name}/{arch}")
           missing = required - platforms
           print("platforms:", ", ".join(sorted(platforms)) or "(none)")
           if missing:

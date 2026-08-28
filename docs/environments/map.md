@@ -9,6 +9,8 @@ OpenStreetMap-based mapping platform with tiles, geocoding, and routing.
 | Image | `am1n3e/webarena-verified-map` |
 | Container | `webarena-verified-map` |
 
+`am1n3e/webarena-verified-map` is **linux/amd64 only**. The upstream OSM website image [`am1n3e/openstreetmap-website-web:base`](https://hub.docker.com/r/am1n3e/openstreetmap-website-web) is published amd64-only, so this image cannot be built for arm64.
+
 ## Optimization
 
 Unlike other environments where the focus was on reducing image size, the Map environment optimization focuses on **usability**. The [original WebArena setup](https://github.com/web-arena-x/webarena/blob/main/webarena-map-backend-boot-init.yaml) required deploying 5 separate containers:

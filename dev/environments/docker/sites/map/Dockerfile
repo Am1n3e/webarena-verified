@@ -1,6 +1,7 @@
 # ============================================================================
 # SOURCE IMAGES (for COPY --from)
-# All source images use linux/amd64 to match the base image architecture
+# linux/amd64 only: upstream OSM website base
+# am1n3e/openstreetmap-website-web:base has no arm64 image.
 # ============================================================================
 ARG BUILDPLATFORM=linux/amd64
 FROM --platform=$BUILDPLATFORM overv/openstreetmap-tile-server@sha256:b6a79da39b6d0758368f7c62d22e49dd3ec59e78b194a5ef9dee2723b1f3fa79 AS tile-server

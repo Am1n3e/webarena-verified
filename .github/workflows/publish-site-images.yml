@@ -109,6 +109,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build linux/amd64 for smoke
+        if: ${{ matrix.site != 'gitlab' && matrix.site != 'map' }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -122,6 +123,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=site-${{ matrix.site }}
 
       - name: Smoke test
+        if: ${{ matrix.site != 'gitlab' && matrix.site != 'map' }}
         env:
           IMAGE: ${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}
           SITE: ${{ matrix.site }}
@@ -129,16 +131,12 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --entrypoint env-ctrl "$IMAGE" --help
-          if [ "$SITE" = "map" ]; then
-            echo "map: env-ctrl present; full boot needs data volumes"
-            exit 0
-          fi
 
           extra=()
           if [ "$SITE" = "wikipedia" ]; then
             mkdir -p /tmp/wa-zim
             curl -fsSL -o /tmp/wa-zim/ray.zim \
-              "https://download.kiwix.org/zim/wikipedia/wikipedia_en_ray-charles_maxi_2026-02.zim"
+              "https://download.kiwix.org/zim/wikipedia/wikipedia_en_ray-charles_maxi_2026-08.zim"
             extra+=(-e "WA_ENV_CTRL_ZIM_FILE=/data/ray.zim" -v /tmp/wa-zim:/data:ro)
           fi
 

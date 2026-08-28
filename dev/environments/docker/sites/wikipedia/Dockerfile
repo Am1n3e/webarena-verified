@@ -1,6 +1,6 @@
 FROM ghcr.io/kiwix/kiwix-serve:3.3.0
 
-ARG ENV_CTRL_PORT=8877
+ARG ENV_CTRL_PORT=8874
 
 # Install Python and supervisor
 RUN apk add --no-cache python3 supervisor

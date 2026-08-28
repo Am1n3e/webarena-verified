@@ -26,6 +26,8 @@ All environments are available as optimized Docker images on Docker Hub:
 | Wikipedia | `am1n3e/webarena-verified-wikipedia` |
 | Map | `am1n3e/webarena-verified-map` |
 
+Map is linux/amd64 only because its upstream OSM website image (`am1n3e/openstreetmap-website-web:base`) has no arm64 variant. See [Map](map.md).
+
 ## Size Improvements
 
 Optimized images are significantly smaller than their original counterparts:

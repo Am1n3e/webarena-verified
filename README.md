@@ -17,6 +17,7 @@ WebArena-Verified is the verified release of the WebArena benchmark. It distribu
 
 ## 📢 Announcements
 
+- **August 28, 2026**: This repository is the maintained fork of [ServiceNow/webarena-verified](https://github.com/ServiceNow/webarena-verified), published by the paper's first author. Fixes and updates will only be maintained here going forward.
 - **February 2, 2026**: Optimized Docker images for all WebArena environments are now available on [Docker Hub](https://hub.docker.com/u/am1n3e)! Images are up to 92% smaller than originals, include auto-login headers, plus a single container for Map (beta) (previously 5 separate containers). See the [Environments documentation](https://servicenow.github.io/webarena-verified/environments/).
 - **February 2, 2026**: WebArena-Verified is now available via Docker and uvx! Run `uvx webarena-verified --help` or `docker run ghcr.io/servicenow/webarena-verified:latest --help` to get started.
 - **January 7, 2026**: WebArena-Verified is now available on PyPI! Install it easily with `pip install webarena-verified`.

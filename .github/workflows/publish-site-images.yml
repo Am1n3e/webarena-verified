@@ -6,6 +6,7 @@ name: Publish Site Images
 #
 # All site images are published as linux/amd64 + linux/arm64.
 # Releases always rebuild and push every site; Docker layer cache skips unchanged layers.
+# workflow_dispatch + dry_run builds both architectures without pushing (manual test).
 on:
   release:
     types: [published]
@@ -32,9 +33,9 @@ on:
         type: boolean
         default: true
       dry_run:
-        description: "Build without pushing to Docker Hub"
+        description: "Build without pushing to Docker Hub (manual test)"
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -94,12 +95,27 @@ jobs:
             echo "dockerfile=dev/environments/docker/sites/${SITE}/Dockerfile"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Build and push
+      - name: Build only
+        if: ${{ github.event_name != 'release' && inputs.dry_run == true }}
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ steps.image.outputs.dockerfile }}
-          push: ${{ github.event_name == 'release' || inputs.dry_run != true }}
+          push: false
+          outputs: type=cacheonly
+          tags: ${{ steps.image.outputs.tags }}
+          platforms: linux/amd64,linux/arm64
+          provenance: false
+          cache-from: type=gha,scope=site-${{ matrix.site }}
+          cache-to: type=gha,mode=max,scope=site-${{ matrix.site }}
+
+      - name: Build and push
+        if: ${{ github.event_name == 'release' || inputs.dry_run != true }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ steps.image.outputs.dockerfile }}
+          push: true
           tags: ${{ steps.image.outputs.tags }}
           platforms: linux/amd64,linux/arm64
           provenance: false

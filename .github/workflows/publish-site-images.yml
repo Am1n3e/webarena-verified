@@ -78,9 +78,11 @@ jobs:
           if [ "${{ inputs.push_latest }}" = "true" ]; then
             TAGS="${TAGS},${IMAGE}:latest"
           fi
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
-          echo "dockerfile=dev/environments/docker/sites/${SITE}/Dockerfile" >> "$GITHUB_OUTPUT"
+          {
+            echo "image=${IMAGE}"
+            echo "tags=${TAGS}"
+            echo "dockerfile=dev/environments/docker/sites/${SITE}/Dockerfile"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6

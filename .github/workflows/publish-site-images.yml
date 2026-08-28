@@ -5,7 +5,10 @@ name: Publish Site Images
 #   DOCKERHUB_TOKEN     Docker Hub access token
 #
 # All site images are published as linux/amd64 + linux/arm64.
+# Releases always rebuild and push every site; Docker layer cache skips unchanged layers.
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       site:
@@ -38,7 +41,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: publish-site-images-${{ github.event.inputs.site }}-${{ github.event.inputs.tag }}
+  group: publish-site-images-${{ github.event.release.tag_name || github.event.inputs.tag || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -49,7 +52,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        site: ${{ fromJSON(inputs.site == 'all' && '["gitlab","map","reddit","shopping","shopping_admin","wikipedia"]' || format('["{0}"]', inputs.site)) }}
+        site: ${{ fromJSON(github.event_name == 'release' && '["gitlab","map","reddit","shopping","shopping_admin","wikipedia"]' || (inputs.site == 'all' && '["gitlab","map","reddit","shopping","shopping_admin","wikipedia"]' || format('["{0}"]', inputs.site))) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -61,7 +64,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
-        if: ${{ inputs.dry_run != true }}
+        if: ${{ github.event_name == 'release' || inputs.dry_run != true }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -71,14 +74,22 @@ jobs:
         id: image
         run: |
           SITE="${{ matrix.site }}"
-          TAG="${{ inputs.tag }}"
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            PUSH_LATEST="${{ github.event.release.prerelease == false }}"
+          else
+            TAG="${{ inputs.tag }}"
+            PUSH_LATEST="${{ inputs.push_latest }}"
+          fi
+          TAG="${TAG#v}"
           IMAGE="am1n3e/webarena-verified-${SITE}"
           TAGS="${IMAGE}:${TAG}"
-          if [ "${{ inputs.push_latest }}" = "true" ]; then
+          if [ "$PUSH_LATEST" = "true" ]; then
             TAGS="${TAGS},${IMAGE}:latest"
           fi
           {
             echo "image=${IMAGE}"
+            echo "tag=${TAG}"
             echo "tags=${TAGS}"
             echo "dockerfile=dev/environments/docker/sites/${SITE}/Dockerfile"
           } >> "$GITHUB_OUTPUT"
@@ -88,7 +99,7 @@ jobs:
         with:
           context: .
           file: ${{ steps.image.outputs.dockerfile }}
-          push: ${{ inputs.dry_run != true }}
+          push: ${{ github.event_name == 'release' || inputs.dry_run != true }}
           tags: ${{ steps.image.outputs.tags }}
           platforms: linux/amd64,linux/arm64
           provenance: false
@@ -96,9 +107,9 @@ jobs:
           cache-to: type=gha,mode=max,scope=site-${{ matrix.site }}
 
       - name: Verify image manifest
-        if: ${{ inputs.dry_run != true }}
+        if: ${{ github.event_name == 'release' || inputs.dry_run != true }}
         run: |
-          IMAGE_REF="${{ steps.image.outputs.image }}:${{ inputs.tag }}"
+          IMAGE_REF="${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}"
           docker buildx imagetools inspect "$IMAGE_REF"
           docker buildx imagetools inspect --raw "$IMAGE_REF" | python3 -c '
           import json, sys

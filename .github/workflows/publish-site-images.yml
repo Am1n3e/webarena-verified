@@ -144,8 +144,7 @@ jobs:
 
           name="wa-smoke-${SITE}"
           docker rm -f "$name" >/dev/null 2>&1 || true
-          cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
-          trap cleanup EXIT
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
           docker run -d --name "$name" -p "18877:${ENV_CTRL_PORT}" "${extra[@]}" "$IMAGE"
           i=0
           while [ "$i" -lt 30 ]; do

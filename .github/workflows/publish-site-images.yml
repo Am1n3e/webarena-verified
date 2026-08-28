@@ -4,9 +4,9 @@ name: Publish Site Images
 #   DOCKERHUB_USERNAME  Docker Hub user that can push am1n3e/webarena-verified-*
 #   DOCKERHUB_TOKEN     Docker Hub access token
 #
-# All site images are published as linux/amd64 + linux/arm64.
+# Site images are linux/amd64 + linux/arm64, except map (amd64-only: OSM/Nominatim/OSRM bases).
 # Releases always rebuild and push every site; Docker layer cache skips unchanged layers.
-# workflow_dispatch + dry_run builds both architectures without pushing (manual test).
+# workflow_dispatch + dry_run builds without pushing (manual test).
 on:
   release:
     types: [published]
@@ -88,10 +88,16 @@ jobs:
           if [ "$PUSH_LATEST" = "true" ]; then
             TAGS="${TAGS},${IMAGE}:latest"
           fi
+          if [ "$SITE" = "map" ]; then
+            PLATFORMS="linux/amd64"
+          else
+            PLATFORMS="linux/amd64,linux/arm64"
+          fi
           {
             echo "image=${IMAGE}"
             echo "tag=${TAG}"
             echo "tags=${TAGS}"
+            echo "platforms=${PLATFORMS}"
             echo "dockerfile=dev/environments/docker/sites/${SITE}/Dockerfile"
           } >> "$GITHUB_OUTPUT"
 
@@ -104,7 +110,7 @@ jobs:
           push: false
           outputs: type=cacheonly
           tags: ${{ steps.image.outputs.tags }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ steps.image.outputs.platforms }}
           provenance: false
           cache-from: type=gha,scope=site-${{ matrix.site }}
           cache-to: type=gha,mode=max,scope=site-${{ matrix.site }}
@@ -117,27 +123,36 @@ jobs:
           file: ${{ steps.image.outputs.dockerfile }}
           push: true
           tags: ${{ steps.image.outputs.tags }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ steps.image.outputs.platforms }}
           provenance: false
           cache-from: type=gha,scope=site-${{ matrix.site }}
           cache-to: type=gha,mode=max,scope=site-${{ matrix.site }}
 
       - name: Verify image manifest
         if: ${{ github.event_name == 'release' || inputs.dry_run != true }}
+        env:
+          REQUIRED_PLATFORMS: ${{ steps.image.outputs.platforms }}
         run: |
           IMAGE_REF="${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}"
           docker buildx imagetools inspect "$IMAGE_REF"
-          docker buildx imagetools inspect --raw "$IMAGE_REF" | python3 -c '
-          import json, sys
+          docker buildx imagetools inspect --format '{{json .}}' "$IMAGE_REF" | python3 -c '
+          import json, os, sys
           data = json.load(sys.stdin)
+          required = {p.strip() for p in os.environ["REQUIRED_PLATFORMS"].split(",") if p.strip()}
           platforms = set()
-          for manifest in data.get("manifests") or []:
+          manifests = (data.get("manifest") or {}).get("manifests") or data.get("manifests") or []
+          for manifest in manifests:
               platform = manifest.get("platform") or {}
               os_name = platform.get("os")
               arch = platform.get("architecture")
               if os_name and arch:
                   platforms.add(f"{os_name}/{arch}")
-          required = {"linux/amd64", "linux/arm64"}
+          if not platforms:
+              image = data.get("image") or {}
+              os_name = image.get("os")
+              arch = image.get("architecture")
+              if os_name and arch:
+                  platforms.add(f"{os_name}/{arch}")
           missing = required - platforms
           print("platforms:", ", ".join(sorted(platforms)) or "(none)")
           if missing:

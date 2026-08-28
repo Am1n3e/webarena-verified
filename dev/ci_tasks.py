@@ -23,9 +23,9 @@ def _get_docker_platform_flag() -> str:
     return ""
 
 
-# CI-specific ZIM file for Wikipedia tests (small ~2.7MB file)
-CI_WIKIPEDIA_ZIM_URL = "https://download.kiwix.org/zim/wikipedia/wikipedia_en_ray-charles_maxi_2026-02.zim"
-CI_WIKIPEDIA_ZIM_NAME = "wikipedia_en_ray-charles_maxi_2026-02.zim"
+# CI-specific ZIM file for Wikipedia tests (small ~3MB file)
+CI_WIKIPEDIA_ZIM_URL = "https://download.kiwix.org/zim/wikipedia/wikipedia_en_ray-charles_maxi_2026-08.zim"
+CI_WIKIPEDIA_ZIM_NAME = "wikipedia_en_ray-charles_maxi_2026-08.zim"
 
 # Monaco OSM data URL for map CI tests (~656KB)
 MONACO_PBF_URL = "https://download.geofabrik.de/europe/monaco-latest.osm.pbf"

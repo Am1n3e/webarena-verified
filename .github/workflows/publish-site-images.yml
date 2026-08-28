@@ -138,7 +138,7 @@ jobs:
           if [ "$SITE" = "wikipedia" ]; then
             mkdir -p /tmp/wa-zim
             curl -fsSL -o /tmp/wa-zim/ray.zim \
-              "https://download.kiwix.org/zim/wikipedia/wikipedia_en_ray-charles_maxi_2026-02.zim"
+              "https://download.kiwix.org/zim/wikipedia/wikipedia_en_ray-charles_maxi_2026-08.zim"
             extra+=(-e "WA_ENV_CTRL_ZIM_FILE=/data/ray.zim" -v /tmp/wa-zim:/data:ro)
           fi
 
